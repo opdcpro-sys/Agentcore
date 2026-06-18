@@ -1,0 +1,6 @@
+{
+  "name": "Telegram Userbot Dashboard",
+  "description": "A control panel and hosting platform for a custom Telegram Userbot with RBAC and Speedtest features.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
