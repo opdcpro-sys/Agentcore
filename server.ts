@@ -14,7 +14,7 @@ import AdmZip from 'adm-zip';
 const app = express();
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const DATA_FILE = path.join(process.cwd(), 'bot_data.json');
 
 // Interface definition
@@ -1087,6 +1087,55 @@ app.get('/api/export-repo', (req, res) => {
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Real-Time Speedtest Endpoints
+app.all('/api/speedtest/ping', (req, res) => {
+  res.json({ timestamp: Date.now() });
+});
+
+// Stream dummy download data for live speed testing
+app.get('/api/speedtest/download', (req, res) => {
+  const sizeMb = parseInt(req.query.size as string) || 15; // default 15MB
+  const chunkSize = 128 * 1024; // 128KB chunk for smooth streaming updates
+  const dummyBuffer = Buffer.alloc(chunkSize, 'x');
+
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Length', sizeMb * 1024 * 1024);
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+
+  let sentBytes = 0;
+  const totalTargetBytes = sizeMb * 1024 * 1024;
+
+  function sendChunk() {
+    if (sentBytes < totalTargetBytes) {
+      if (res.writableEnded) return;
+      const remainingBytes = totalTargetBytes - sentBytes;
+      const currentChunkSize = Math.min(chunkSize, remainingBytes);
+      const chunkToWrite = currentChunkSize === chunkSize ? dummyBuffer : dummyBuffer.subarray(0, currentChunkSize);
+
+      res.write(chunkToWrite, (err) => {
+        if (!err) {
+          sentBytes += currentChunkSize;
+          sendChunk();
+        }
+      });
+    } else {
+      res.end();
+    }
+  }
+  sendChunk();
+});
+
+// Handle simulated upload data
+app.post('/api/speedtest/upload', (req, res) => {
+  let bytesReceived = 0;
+  req.on('data', (chunk) => {
+    bytesReceived += chunk.length;
+  });
+  req.on('end', () => {
+    res.json({ status: 'ok', size: bytesReceived });
+  });
 });
 
 app.post('/api/setup', async (req, res) => {
