@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCcw, Shield, Activity, Power, Users, Key, TerminalSquare, Cpu, HardDrive, Zap } from 'lucide-react';
+import { RefreshCcw, Shield, Activity, Power, Users, Key, TerminalSquare, Cpu, HardDrive, Zap, Github, FolderArchive, Download } from 'lucide-react';
 import { AppState, SetupPayload } from './types';
+
+const GITHUB_INSTRUCTIONS = `# 1. Unzip the source code in your directory
+cd tadakeda-userbot-source
+
+# 2. Initialize Git, stage & commit files
+git init
+git add .
+git commit -m "Initialize Tadakeda Core v4.0"
+
+# 3. Create a branch and set remote repository
+git branch -M main
+git remote add origin https://github.com/your-username/your-repository-name.git
+
+# 4. Push directly
+git push -u origin main`;
 
 // System Health Monitor Component
 function SystemHealthMonitor() {
@@ -321,6 +336,50 @@ export default function App() {
                  </div>
               </div>
             )}
+
+            {/* Pristine Code Exporter & Git Installer CLI */}
+            <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 shadow-xl space-y-6">
+              <div className="flex items-center space-x-3 border-b border-neutral-800 pb-4">
+                <FolderArchive className="w-6 h-6 text-indigo-400" />
+                <div>
+                  <h3 className="text-lg font-medium text-white">Source Exporter & Git Deployment</h3>
+                  <p className="text-xs text-neutral-500">Rebrand, compile, pack and host the bot code wherever you want.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-neutral-950/50 rounded-xl border border-neutral-800 space-y-2">
+                  <h4 className="text-sm font-medium text-white flex items-center gap-2">
+                    <Download className="w-4 h-4 text-emerald-400" />
+                    Download Pristine ZIP Archive
+                  </h4>
+                  <p className="text-xs text-neutral-400">
+                    Get the completely clean source code directory of <strong className="text-neutral-200">Tadakeda Core</strong> without any external cloud watermarks or development platform traces.
+                  </p>
+                  <a
+                    href="/api/export-repo"
+                    download
+                    className="inline-flex items-center gap-2 mt-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors cursor-pointer text-center"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download source.zip
+                  </a>
+                </div>
+
+                <div className="p-4 bg-neutral-950/50 rounded-xl border border-neutral-800 space-y-2">
+                  <h4 className="text-sm font-medium text-white flex items-center gap-2">
+                    <Github className="w-4 h-4 text-indigo-400" />
+                    Automated GitHub Deployment Guide
+                  </h4>
+                  <p className="text-xs text-neutral-400">
+                    Copy the commands below to initialize and deploy this exact clean system to your own private or public GitHub repository:
+                  </p>
+                  <div className="bg-black/80 rounded-lg p-3 text-xs font-mono text-indigo-300 border border-neutral-800 overflow-x-auto whitespace-pre">
+                    {GITHUB_INSTRUCTIONS}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Right Sidebar */}

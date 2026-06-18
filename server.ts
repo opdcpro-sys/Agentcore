@@ -9,6 +9,7 @@ import os from 'os';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 import { generateSysinfoImage } from './sysinfo_drawer';
+import AdmZip from 'adm-zip';
 
 const app = express();
 app.use(express.json());
@@ -1040,6 +1041,52 @@ app.get('/api/sysinfo', (req, res) => {
     uptime,
     nodeVersion: process.version
   });
+});
+
+app.get('/api/export-repo', (req, res) => {
+  try {
+    const zip = new AdmZip();
+    const projectRoot = process.cwd();
+    
+    function addDirectoryToZip(currentDir: string, zipPathPrefix = '') {
+      const items = fs.readdirSync(currentDir);
+      for (const item of items) {
+        const fullPath = path.join(currentDir, item);
+        const stat = fs.statSync(fullPath);
+        
+        if (
+          item === 'node_modules' ||
+          item === 'dist' ||
+          item === '.git' ||
+          item === 'bot_data.json' ||
+          item === 'chat_history.json' ||
+          item.includes('.lock') ||
+          item.startsWith('sysinfo-')
+        ) {
+          continue;
+        }
+        
+        if (stat.isDirectory()) {
+          const zipDirPath = path.join(zipPathPrefix, item);
+          addDirectoryToZip(fullPath, zipDirPath);
+        } else {
+          // Read content and put in zip
+          const zipFilePath = path.join(zipPathPrefix, item);
+          const fileContent = fs.readFileSync(fullPath);
+          zip.addFile(zipFilePath, fileContent);
+        }
+      }
+    }
+    
+    addDirectoryToZip(projectRoot);
+    const buffer = zip.toBuffer();
+    
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename=tadakeda-userbot-source.zip');
+    res.send(buffer);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.post('/api/setup', async (req, res) => {
