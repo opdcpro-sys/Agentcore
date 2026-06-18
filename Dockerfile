@@ -1,27 +1,18 @@
-# Use official lightweight Node 20 image
+# Use official lightweight Node 20 image as builder
 FROM node:20-slim AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Install build dependencies for native modules if any
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy package descriptors
+# Copy package files
 COPY package*.json ./
 
-# Install dependencies including devDependencies (for bundling)
+# Install all dependencies (including devDependencies for build)
 RUN npm ci
 
-# Copy source code
+# Copy the rest of the application files
 COPY . .
 
-# Build Vite frontend and bundle Express backend
+# Build Vite frontend and bundle backend
 RUN npm run build
 
 # --- Production Stage ---
@@ -29,24 +20,24 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Create a non-root group and user for security in Hugging Face environment
-RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+# In node:20-slim, the 'node' user is already created with UID 1000.
+# We make sure the files are owned by user 'node' (UID 1000) to comply with Hugging Face's security.
+COPY --chown=node:node --from=builder /app/package*.json ./
+COPY --chown=node:node --from=builder /app/dist ./dist
 
-# Only copy necessary run-time artifacts
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/dist ./dist
-# If database records or other files are stored locally, allow write permission
-RUN touch bot_data.json && chown appuser:appuser bot_data.json
+# Create a writable bot_data.json owned by node
+RUN touch bot_data.json && chown node:node bot_data.json
 
 # Install only production dependencies
 RUN npm ci --only=production
 
-# Hugging Face Spaces executes on port 7860 by default
+# Expose port and configure environment variables
+ENV NODE_ENV=production
 ENV PORT=7860
 EXPOSE 7860
 
-# Switch to the non-root secure user
-USER appuser
+# Switch to the pre-existing user 'node' (UID 1000) for security and Hugging Face compatibility
+USER node
 
-# Launch the production compiled bundle
+# Start the application
 CMD ["npm", "start"]

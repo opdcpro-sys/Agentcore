@@ -528,10 +528,12 @@ Text to analyze: "${text}"`;
 🔮 **!autodetect on/off** - Auto map intent to commands using AI.
 ℹ️ **!help** - Show this message.
 
-*(Owner & Master Backup)*
+*(Owner & Updates)*
 📁 **!setbackup** - Designate current chat as background backup vault.
 📤 **!backup** - Trigger data backup manually (.json configs & logs).
 🔓 **!access-m** - Search & restore lost data instantly from backups.
+📥 **!download [file/codebase]** - Download code zip or a specific file.
+📤 **!upload [path]** - Reply to a document to upload/overwrite it. Include 'unzip' for archives.
 
 *(Owner Only)*
 🛡 **!promote [userId] [S/A/B]** - Assign an agent tier.
@@ -723,6 +725,171 @@ Storage: Intel RAID NVMe PCIe Gen 5 (142GB used / 2TB total)
       } catch (err: any) {
         await safeEdit(message.chatId!, m.id, `❌ **Access check crashed:** ${err.message}`);
       }
+    }
+
+    if (text.startsWith('!download') || text.startsWith('/download') || text.startsWith('/.download')) {
+      if (!isAuthorized) {
+        await client!.sendMessage(message.chatId!, { message: '❌ Unauthorized.', replyTo: message.id });
+        return;
+      }
+      const parts = text.split(' ');
+      const m = await client!.sendMessage(message.chatId!, { message: '📥 **Processing download request...**', replyTo: message.id });
+      try {
+        if (parts.length < 2 || parts[1] === 'codebase') {
+          // Send entire workspace as zip
+          const zip = new AdmZip();
+          const projectRoot = process.cwd();
+          
+          function addDirectoryToZip(currentDir: string, zipPathPrefix = '') {
+            const items = fs.readdirSync(currentDir);
+            for (const item of items) {
+              const fullPath = path.join(currentDir, item);
+              const stat = fs.statSync(fullPath);
+              
+              if (
+                item === 'node_modules' ||
+                item === 'dist' ||
+                item === '.git' ||
+                item === 'bot_data.json' ||
+                item === 'chat_history.json' ||
+                item.includes('.lock') ||
+                item.startsWith('sysinfo-')
+              ) {
+                continue;
+              }
+              
+              if (stat.isDirectory()) {
+                const zipDirPath = path.join(zipPathPrefix, item);
+                addDirectoryToZip(fullPath, zipDirPath);
+              } else {
+                const zipFilePath = path.join(zipPathPrefix, item);
+                const fileContent = fs.readFileSync(fullPath);
+                zip.addFile(zipFilePath, fileContent);
+              }
+            }
+          }
+          
+          addDirectoryToZip(projectRoot);
+          const buffer = zip.toBuffer();
+          await client!.sendFile(message.chatId!, {
+            file: buffer,
+            caption: '📦 **Here is the latest workspace source code archive!**',
+            forceDocument: true,
+            replyTo: message.id
+          });
+          await safeEdit(message.chatId!, m.id, '✅ **Workspace codebase zipped and sent successfully!**');
+        } else {
+          // Send specific file
+          const requestedFile = parts.slice(1).join(' ').trim();
+          const filePath = path.resolve(process.cwd(), requestedFile);
+          
+          if (!filePath.startsWith(process.cwd())) {
+            await safeEdit(message.chatId!, m.id, '❌ **Security boundary violation:** You cannot access files outside the workspace directory.');
+            return;
+          }
+          
+          if (!fs.existsSync(filePath)) {
+            await safeEdit(message.chatId!, m.id, `❌ **File not found:** \`${requestedFile}\``);
+            return;
+          }
+          
+          const stat = fs.statSync(filePath);
+          if (stat.isDirectory()) {
+            await safeEdit(message.chatId!, m.id, `❌ \`${requestedFile}\` is a directory. Specify a direct file path, or run \`!download\` without arguments to get the entire codebase as a zip.`);
+            return;
+          }
+          
+          await client!.sendFile(message.chatId!, {
+            file: filePath,
+            caption: `📄 **File:** \`${requestedFile}\``,
+            forceDocument: true,
+            replyTo: message.id
+          });
+          await safeEdit(message.chatId!, m.id, `✅ **File \`${requestedFile}\` sent successfully!**`);
+        }
+      } catch (err: any) {
+        await safeEdit(message.chatId!, m.id, `❌ **Download failed:** ${err.message}`);
+      }
+      return;
+    }
+
+    if (text.startsWith('!upload') || text.startsWith('/upload') || text.startsWith('/.upload')) {
+      if (!isAuthorized) {
+        await client!.sendMessage(message.chatId!, { message: '❌ Unauthorized.', replyTo: message.id });
+        return;
+      }
+      const parts = text.split(' ');
+      const m = await client!.sendMessage(message.chatId!, { message: '📤 **Processing upload request...**', replyTo: message.id });
+      try {
+        let targetMsg = message;
+        
+        if (message.replyToMsgId || message.replyTo) {
+          const replied = await message.getReplyMessage();
+          if (replied && replied.media) {
+            targetMsg = replied;
+          }
+        }
+        
+        if (!targetMsg.media) {
+          await safeEdit(message.chatId!, m.id, '❌ **Error:** Please reply to a message containing a document/file with the command `!upload [optional_filepath]` to save or overwrite it.');
+          return;
+        }
+        
+        let originalFilename = 'uploaded_file';
+        const media = targetMsg.media;
+        
+        if (media.document) {
+          const attributes = media.document.attributes || [];
+          for (const attr of attributes) {
+            if (attr.className === 'DocumentAttributeFilename' && attr.fileName) {
+              originalFilename = attr.fileName;
+              break;
+            }
+          }
+        }
+        
+        let destFilename = originalFilename;
+        if (parts.length > 1) {
+          destFilename = parts.slice(1).join(' ').trim();
+        }
+        
+        const destPath = path.resolve(process.cwd(), destFilename);
+        
+        if (!destPath.startsWith(process.cwd())) {
+          await safeEdit(message.chatId!, m.id, '❌ **Security boundary violation:** You cannot save files outside the workspace directory.');
+          return;
+        }
+        
+        const parentDir = path.dirname(destPath);
+        if (!fs.existsSync(parentDir)) {
+          fs.mkdirSync(parentDir, { recursive: true });
+        }
+        
+        const buffer = await client!.downloadMedia(targetMsg, {});
+        if (!buffer) {
+          await safeEdit(message.chatId!, m.id, '❌ **Error:** Failed to download file from Telegram.');
+          return;
+        }
+        
+        fs.writeFileSync(destPath, buffer);
+        
+        let extraInfo = '';
+        if (destFilename.endsWith('.zip') && parts.includes('unzip')) {
+          try {
+            const zip = new AdmZip(destPath);
+            zip.extractAllTo(process.cwd(), true);
+            extraInfo = '\n📦 **Zip archive detected and successfully extracted/unzipped to workspace root!**';
+          } catch (unzipErr: any) {
+            extraInfo = `\n⚠️ **Failed to auto-extract zip:** ${unzipErr.message}`;
+          }
+        }
+        
+        await safeEdit(message.chatId!, m.id, `✅ **File successfully uploaded and saved!**\n\n📁 **Saved to:** \`${destFilename}\`\n📂 **Size:** \`${(buffer.length / 1024).toFixed(2)} KB\`${extraInfo}`);
+        
+      } catch (err: any) {
+        await safeEdit(message.chatId!, m.id, `❌ **Upload failed:** ${err.message}`);
+      }
+      return;
     }
 
     if (text.match(/^[!/.]game/i)) {
