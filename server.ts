@@ -759,10 +759,10 @@ Storage: Intel RAID NVMe PCIe Gen 5 (142GB used / 2TB total)
               }
               
               if (stat.isDirectory()) {
-                const zipDirPath = path.join(zipPathPrefix, item);
+                const zipDirPath = path.join(zipPathPrefix, item).replace(/\\/g, '/');
                 addDirectoryToZip(fullPath, zipDirPath);
               } else {
-                const zipFilePath = path.join(zipPathPrefix, item);
+                const zipFilePath = path.join(zipPathPrefix, item).replace(/\\/g, '/');
                 const fileContent = fs.readFileSync(fullPath);
                 zip.addFile(zipFilePath, fileContent);
               }
@@ -848,9 +848,19 @@ Storage: Intel RAID NVMe PCIe Gen 5 (142GB used / 2TB total)
           }
         }
         
+        let shouldUnzip = false;
+        const partsFiltered = parts.filter((p, index) => {
+          if (index === 0) return false; // skip command keyword
+          if (p.toLowerCase() === 'unzip') {
+            shouldUnzip = true;
+            return false;
+          }
+          return true;
+        });
+
         let destFilename = originalFilename;
-        if (parts.length > 1) {
-          destFilename = parts.slice(1).join(' ').trim();
+        if (partsFiltered.length > 0) {
+          destFilename = partsFiltered.join(' ').trim();
         }
         
         const destPath = path.resolve(process.cwd(), destFilename);
@@ -874,7 +884,7 @@ Storage: Intel RAID NVMe PCIe Gen 5 (142GB used / 2TB total)
         fs.writeFileSync(destPath, buffer);
         
         let extraInfo = '';
-        if (destFilename.endsWith('.zip') && parts.includes('unzip')) {
+        if (destFilename.toLowerCase().endsWith('.zip') && shouldUnzip) {
           try {
             const zip = new AdmZip(destPath);
             zip.extractAllTo(process.cwd(), true);
